@@ -23,19 +23,17 @@ export async function ensureUser(email: string): Promise<string> {
 
 /**
  * Logs in without email: generates a magic link with the admin API and
- * visits the verification URL, which lands on /auth/callback with a code.
+ * verifies its token hash through /auth/confirm, which sets the session
+ * cookies server-side (no PKCE verifier needed).
  */
 export async function loginAs(page: Page, email: string, baseURL: string) {
   await ensureUser(email);
   const admin = adminClient();
-  const { data, error } = await admin.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-    options: { redirectTo: `${baseURL}/auth/callback` },
-  });
-  if (error || !data.properties?.action_link) throw new Error(`generateLink failed: ${error?.message}`);
-  await page.goto(data.properties.action_link);
-  await page.waitForURL(/\/(board|posts|calendar)?(\?.*)?$/, { timeout: 30_000 });
+  const { data, error } = await admin.auth.admin.generateLink({ type: "magiclink", email });
+  const tokenHash = data?.properties?.hashed_token;
+  if (error || !tokenHash) throw new Error(`generateLink failed: ${error?.message}`);
+  await page.goto(`${baseURL}/auth/confirm?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink`);
+  await page.waitForURL(/\/board/, { timeout: 30_000 });
 }
 
 export async function deleteUserPosts(email: string) {
