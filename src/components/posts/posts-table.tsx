@@ -1,29 +1,12 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { ArrowDownIcon, ArrowUpIcon, ExternalLinkIcon, ListTreeIcon } from "lucide-react";
-import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PillarDot } from "@/components/posts/pillar-select";
+import { PillarChip, StatusBadge } from "@/components/posts/status-badge";
 import { isOverdue, postDisplayTitle } from "@/lib/posts/display";
 import type { NormalizedListParams, SortKey } from "@/lib/posts/list";
-import { STATUS_LABELS, type PostWithItems } from "@/lib/types";
-
-const STATUS_BADGE: Record<string, string> = {
-  idea: "bg-muted text-muted-foreground",
-  draft: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-  scheduled: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
-  published: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
-  cancelled: "bg-muted text-muted-foreground line-through",
-};
-
-export function StatusBadge({ status }: { status: PostWithItems["status"] }) {
-  return (
-    <span className={cn("inline-flex rounded-md px-1.5 py-0.5 text-xs font-medium", STATUS_BADGE[status])} data-testid="status-badge">
-      {STATUS_LABELS[status]}
-    </span>
-  );
-}
+import type { PostWithItems } from "@/lib/types";
 
 function SortLink({
   label,
@@ -59,7 +42,7 @@ export function PostsTable({
   searchParams: URLSearchParams;
 }) {
   return (
-    <div className="rounded-xl border">
+    <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
       <Table>
         <TableHeader>
           <TableRow>
@@ -129,10 +112,7 @@ export function PostsTable({
               </TableCell>
               <TableCell>
                 {p.pillar ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <PillarDot color={p.pillar.color} />
-                    {p.pillar.name}
-                  </span>
+                  <PillarChip name={p.pillar.name} color={p.pillar.color} />
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}

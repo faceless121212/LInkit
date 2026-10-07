@@ -134,7 +134,7 @@ export function CalendarView({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h1 className="font-heading text-xl font-semibold">Calendar</h1>
+          <h1 className="font-heading text-xl font-semibold tracking-tight">Calendar</h1>
           <Button variant="ghost" size="icon-sm" aria-label="Previous" onClick={() => setParams({ date: shiftAnchor(anchor, view, -1) })}>
             <ChevronLeftIcon />
           </Button>

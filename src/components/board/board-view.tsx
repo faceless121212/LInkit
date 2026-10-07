@@ -119,7 +119,7 @@ export function BoardView({ posts: initialPosts }: { posts: PostWithItems[] }) {
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="font-heading text-xl font-semibold">Board</h1>
+        <h1 className="font-heading text-xl font-semibold tracking-tight">Board</h1>
         <div className="flex items-center gap-2">
           <Switch id="show-cancelled" checked={showCancelled} onCheckedChange={(c) => setShowCancelled(c)} />
           <Label htmlFor="show-cancelled" className="text-sm">
@@ -189,21 +189,30 @@ export function BoardView({ posts: initialPosts }: { posts: PostWithItems[] }) {
   );
 }
 
+const COLUMN_DOT: Record<PostStatus, string> = {
+  idea: "bg-muted-foreground/50",
+  draft: "bg-amber-400",
+  scheduled: "bg-sky-400",
+  published: "bg-emerald-400",
+  cancelled: "bg-muted-foreground/30",
+};
+
 function Column({ status, posts }: { status: PostStatus; posts: PostWithItems[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
     <section
       ref={setNodeRef}
       className={cn(
-        "flex min-h-64 flex-col gap-2 rounded-xl border bg-muted/40 p-2 transition-colors",
-        isOver && "border-ring bg-muted",
+        "flex min-h-64 flex-col gap-2 rounded-2xl border border-transparent bg-muted/40 p-2 transition-colors duration-150 dark:bg-muted/25",
+        isOver && "border-primary/40 bg-primary/5",
       )}
       data-testid={`column-${status}`}
       aria-label={`${STATUS_LABELS[status]} column`}
     >
-      <header className="flex items-center justify-between px-1 py-1 text-sm font-medium">
+      <header className="flex items-center gap-2 px-2 py-1.5 text-[13px] font-medium">
+        <span className={cn("size-2 rounded-full", COLUMN_DOT[status])} aria-hidden />
         <span>{STATUS_LABELS[status]}</span>
-        <span className="text-xs text-muted-foreground">{posts.length}</span>
+        <span className="ml-auto rounded-md bg-background/60 px-1.5 text-[11px] text-muted-foreground tabular-nums">{posts.length}</span>
       </header>
       {posts.map((post) => (
         <DraggableCard key={post.id} post={post} />

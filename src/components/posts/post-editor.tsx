@@ -1,10 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckIcon, CopyIcon, Loader2Icon, Trash2Icon } from "lucide-react";
+import { format } from "date-fns";
+import {
+  CalendarClockIcon,
+  CheckCircle2Icon,
+  CheckIcon,
+  ChevronLeftIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  Loader2Icon,
+  MoreHorizontalIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,6 +34,7 @@ import { copyText, ItemEditor, type EditorItem } from "@/components/posts/item-e
 import { MetricsForm } from "@/components/posts/metrics-form";
 import { PillarSelect } from "@/components/posts/pillar-select";
 import { PreviewPanel } from "@/components/posts/preview-panel";
+import { StatusBadge } from "@/components/posts/status-badge";
 import { deletePost, savePost, type SavePostInput } from "@/lib/posts/actions";
 import { itemIssues } from "@/lib/posts/validation";
 import { createClient } from "@/lib/supabase/client";
@@ -87,11 +108,13 @@ export function PostEditor({
   post,
   pillars: initialPillars,
   userId,
+  authorEmail,
   presetScheduledAt,
 }: {
   post: PostWithItems | null;
   pillars: Pillar[];
   userId: string;
+  authorEmail: string;
   presetScheduledAt?: string | null;
 }) {
   const router = useRouter();
@@ -109,29 +132,28 @@ export function PostEditor({
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // Dialog state
   const [publishOpen, setPublishOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [unpublishTarget, setUnpublishTarget] = useState<PostStatus | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const handle = authorEmail.split("@")[0] || "you";
+  const displayName = handle.charAt(0).toUpperCase() + handle.slice(1);
+
   const issues = useMemo(() => itemIssues(state.items, state.items.length > 1 ? "thread" : "single"), [state.items]);
   const issueByIndex = useMemo(() => new Map(issues.map((i) => [i.index, i.reason])), [issues]);
   const canSchedule = issues.length === 0;
 
-  // Signed URLs for existing media
   useEffect(() => {
     const paths = state.items.flatMap((i) => i.media_paths);
     if (paths.length === 0) return;
     signedMediaUrls(createClient(), paths)
       .then((urls) => setMediaUrls((prev) => ({ ...prev, ...urls })))
       .catch(() => {});
-    // Only on mount: later uploads report their URLs directly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Saves the current state. Returns true on success. Safe to call concurrently. */
   const save = useCallback(
     async (override?: Partial<EditorState>): Promise<boolean> => {
       if (savingRef.current) {
@@ -170,11 +192,9 @@ export function PostEditor({
     [postId],
   );
 
-  // Autosave on a debounce after the last change.
   useEffect(() => {
     const serialized = JSON.stringify(toInput(postId, state));
     if (serialized === lastSavedRef.current) return;
-    // Do not create a row for a brand-new, still-empty post.
     const isEmptyNew =
       !persistedRef.current &&
       state.title.trim() === "" &&
@@ -186,7 +206,6 @@ export function PostEditor({
     return () => clearTimeout(t);
   }, [state, postId, save]);
 
-  // Warn before leaving with unsaved changes.
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (saveState === "dirty" || saveState === "saving") e.preventDefault();
@@ -195,11 +214,21 @@ export function PostEditor({
     return () => window.removeEventListener("beforeunload", handler);
   }, [saveState]);
 
-  const update = (patch: Partial<EditorState>) => setState((s) => ({ ...s, ...patch }));
+  // Keyboard: Cmd/Ctrl+S saves, Cmd/Ctrl+Enter copies all.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void save();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [save]);
 
+  const update = (patch: Partial<EditorState>) => setState((s) => ({ ...s, ...patch }));
   const updateItem = (index: number, patch: Partial<EditorItem>) =>
     setState((s) => ({ ...s, items: s.items.map((it, i) => (i === index ? { ...it, ...patch } : it)) }));
-
   const moveItem = (index: number, direction: -1 | 1) =>
     setState((s) => {
       const target = index + direction;
@@ -208,10 +237,8 @@ export function PostEditor({
       [items[index], items[target]] = [items[target], items[index]];
       return { ...s, items };
     });
-
   const removeItem = (index: number) =>
     setState((s) => (s.items.length <= 1 ? s : { ...s, items: s.items.filter((_, i) => i !== index) }));
-
   const addItemBelow = (index: number) =>
     setState((s) => {
       const items = [...s.items];
@@ -219,7 +246,14 @@ export function PostEditor({
       return { ...s, items };
     });
 
-  /** Status changes go through dialogs where the spec requires it. */
+  const applyStatus = async (patch: Partial<EditorState>) => {
+    const merged = { ...stateRef.current, ...patch };
+    setState(merged);
+    const ok = await save(merged);
+    if (ok) toast.success(`Marked as ${STATUS_LABELS[merged.status].toLowerCase()}`);
+    return ok;
+  };
+
   const requestStatus = (next: PostStatus) => {
     if (next === state.status) return;
     if (state.status === "published") {
@@ -243,16 +277,7 @@ export function PostEditor({
     void applyStatus({ status: next });
   };
 
-  const applyStatus = async (patch: Partial<EditorState>) => {
-    const merged = { ...stateRef.current, ...patch };
-    setState(merged);
-    const ok = await save(merged);
-    if (ok) toast.success(`Marked as ${STATUS_LABELS[merged.status].toLowerCase()}`);
-    else toast.error(saveError ?? "Could not save");
-    return ok;
-  };
-
-  const copyAll = () => copyText(state.items.map((i) => i.body).join("\n\n"), "Thread copied");
+  const copyAll = () => copyText(state.items.map((i) => i.body).join("\n\n"), state.items.length > 1 ? "Thread copied" : "Copied");
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -276,163 +301,200 @@ export function PostEditor({
     mediaUrls: i.media_paths.map((p) => mediaUrls[p]).filter(Boolean),
   }));
 
+  const isPublished = state.status === "published";
+  const isScheduled = state.status === "scheduled";
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Input
-            value={state.title}
-            onChange={(e) => update({ title: e.target.value })}
-            placeholder="Internal title (not published)"
-            className="h-9 max-w-md text-base font-medium"
-            aria-label="Title"
-          />
-          <div className="flex items-center gap-2">
-            <SaveIndicator state={saveState} error={saveError} />
-            <Button type="button" variant="outline" size="sm" onClick={() => void save()} disabled={saveState === "saving"}>
-              Save
-            </Button>
-          </div>
-        </div>
-
-        {state.status === "scheduled" && !canSchedule && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-            This post is scheduled but has an empty or too-long item. Fix it before posting.
-          </p>
-        )}
-
-        <div className="flex flex-col gap-3">
-          {state.items.map((item, index) => (
-            <ItemEditor
-              key={item.id}
-              item={item}
-              index={index}
-              total={state.items.length}
-              userId={userId}
-              postId={postId}
-              mediaUrls={mediaUrls}
-              issue={issueByIndex.get(index)}
-              onChange={(patch) => updateItem(index, patch)}
-              onMediaUrls={(urls) => setMediaUrls((prev) => ({ ...prev, ...urls }))}
-              onMove={(d) => moveItem(index, d)}
-              onRemove={() => removeItem(index)}
-              onAddBelow={() => addItemBelow(index)}
-              beforeUpload={() => save()}
-            />
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {state.items.length > 1 && (
-            <Button type="button" variant="outline" size="sm" onClick={() => void copyAll()}>
-              <CopyIcon data-icon="inline-start" />
-              Copy all
-            </Button>
-          )}
-          {state.status !== "scheduled" && state.status !== "published" && (
+    <div className="-mx-4 -mt-5 md:-mx-8 md:-mt-6">
+      {/* Top bar */}
+      <div className="sticky top-0 z-20 flex items-center gap-2 border-b bg-background/85 px-3 py-2 backdrop-blur md:px-5">
+        <Button variant="ghost" size="icon-sm" render={<Link href="/board" />} nativeButton={false} aria-label="Back to board">
+          <ChevronLeftIcon />
+        </Button>
+        <Input
+          value={state.title}
+          onChange={(e) => update({ title: e.target.value })}
+          placeholder="Untitled post"
+          className="h-8 max-w-sm flex-1 border-transparent bg-transparent px-2 text-[15px] font-medium shadow-none hover:border-input focus-visible:border-input dark:bg-transparent"
+          aria-label="Title"
+        />
+        <StatusBadge status={state.status} className="hidden sm:inline-flex" />
+        <div className="ml-auto flex items-center gap-1.5">
+          <SaveIndicator state={saveState} error={saveError} />
+          {!isPublished && (
             <Button
-              type="button"
               variant="outline"
               size="sm"
-              disabled={!canSchedule}
-              title={canSchedule ? undefined : "Fix empty or too-long posts first"}
-              onClick={() => requestStatus("scheduled")}
+              onClick={() => (isScheduled ? setScheduleOpen(true) : requestStatus("scheduled"))}
+              disabled={!canSchedule && !isScheduled}
+              title={!canSchedule && !isScheduled ? "Fix empty or too-long posts first" : undefined}
+              data-testid="schedule-button"
             >
-              Mark as scheduled
+              <CalendarClockIcon data-icon="inline-start" />
+              {isScheduled && state.scheduledAt
+                ? format(new Date(state.scheduledAt), "EEE d MMM, HH:mm")
+                : state.scheduledAt
+                  ? `Schedule · ${format(new Date(state.scheduledAt), "d MMM, HH:mm")}`
+                  : "Schedule"}
             </Button>
           )}
-          {state.status !== "published" && (
-            <Button type="button" size="sm" onClick={() => requestStatus("published")}>
+          {!isPublished && (
+            <Button size="sm" onClick={() => requestStatus("published")} data-testid="publish-button">
               <CheckIcon data-icon="inline-start" />
-              Mark as published
+              Mark published
             </Button>
           )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="ml-auto text-destructive"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2Icon data-icon="inline-start" />
-            Delete
-          </Button>
-        </div>
-
-        <div className="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <Label>Status</Label>
-            <Select
-              value={state.status}
-              onValueChange={(v) => requestStatus(v as PostStatus)}
-              items={POST_STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s] }))}
+          {isPublished && state.publishedUrl && (
+            <Button
+              variant="outline"
+              size="sm"
+              render={<a href={state.publishedUrl} target="_blank" rel="noreferrer" />}
+              nativeButton={false}
+              className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
             >
-              <SelectTrigger className="w-full" aria-label="Status" data-testid="status-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {POST_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s} disabled={s === "scheduled" && !canSchedule && state.status !== "scheduled"}>
-                    {STATUS_LABELS[s]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scheduled-at-input">Scheduled for</Label>
-            <Input
-              id="scheduled-at-input"
-              type="datetime-local"
-              value={isoToLocalInput(state.scheduledAt)}
-              onChange={(e) => update({ scheduledAt: localInputToIso(e.target.value) })}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Pillar</Label>
-            <PillarSelect
-              pillars={pillars}
-              value={state.pillarId}
-              onChange={(pillarId) => update({ pillarId })}
-              onPillarCreated={(p) => setPillars((list) => [...list, p].sort((a, b) => a.name.localeCompare(b.name)))}
-            />
-          </div>
-          {state.status === "published" && (
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="published-url-input">Published URL</Label>
-              <Input id="published-url-input" value={state.publishedUrl ?? ""} readOnly />
-              <span className="text-xs text-muted-foreground">
-                Published {state.publishedAt ? new Date(state.publishedAt).toLocaleString() : ""}.{" "}
-                <button type="button" className="underline" onClick={() => setPublishOpen(true)}>
-                  Edit
-                </button>
-              </span>
-            </div>
+              <CheckCircle2Icon data-icon="inline-start" />
+              Published
+              <ExternalLinkIcon data-icon="inline-end" />
+            </Button>
           )}
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              value={state.notes}
-              onChange={(e) => update({ notes: e.target.value })}
-              placeholder="Sources, links, reminders to self…"
-              className="min-h-20"
-            />
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" />}>
+              <MoreHorizontalIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void copyAll()}>
+                <CopyIcon />
+                {state.items.length > 1 ? "Copy all" : "Copy text"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void save()}>
+                <CheckIcon />
+                Save now
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
+                <Trash2Icon />
+                Delete post
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-
-        {state.status === "published" && persistedRef.current && (
-          <div className="rounded-xl border bg-card p-4">
-            <h2 className="mb-3 text-sm font-medium">Metrics (manual)</h2>
-            <MetricsForm postId={postId} metrics={post?.post_metrics ?? null} />
-          </div>
-        )}
       </div>
 
-      <aside className="lg:sticky lg:top-6 lg:self-start">
-        <h2 className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Preview</h2>
-        <PreviewPanel items={previewItems} />
-      </aside>
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-6 md:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] lg:gap-10">
+        {/* Editor column */}
+        <div className="mx-auto w-full max-w-2xl">
+          {isScheduled && !canSchedule && (
+            <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+              This post is scheduled but has an empty or too-long item. Fix it before posting.
+            </p>
+          )}
+          <div className="flex flex-col">
+            {state.items.map((item, index) => (
+              <ItemEditor
+                key={item.id}
+                item={item}
+                index={index}
+                total={state.items.length}
+                userId={userId}
+                postId={postId}
+                mediaUrls={mediaUrls}
+                issue={issueByIndex.get(index)}
+                avatarInitial={displayName.charAt(0)}
+                onChange={(patch) => updateItem(index, patch)}
+                onMediaUrls={(urls) => setMediaUrls((prev) => ({ ...prev, ...urls }))}
+                onMove={(d) => moveItem(index, d)}
+                onRemove={() => removeItem(index)}
+                onAddBelow={() => addItemBelow(index)}
+                beforeUpload={() => save()}
+              />
+            ))}
+          </div>
+          {state.items.length > 1 && (
+            <div className="mt-6 flex items-center gap-2 border-t pt-4">
+              <Button type="button" variant="outline" size="sm" onClick={() => void copyAll()}>
+                <CopyIcon data-icon="inline-start" />
+                Copy all {state.items.length} posts
+              </Button>
+              <span className="text-xs text-muted-foreground">Joined with blank lines, ready to paste into X.</span>
+            </div>
+          )}
+        </div>
+
+        {/* Side column */}
+        <aside className="flex flex-col gap-5 lg:sticky lg:top-16 lg:self-start">
+          <section>
+            <h2 className="mb-2 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Preview</h2>
+            <PreviewPanel items={previewItems} displayName={displayName} handle={handle} />
+          </section>
+
+          <section className="rounded-2xl border bg-card p-4 shadow-sm">
+            <h2 className="mb-3 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Details</h2>
+            <div className="flex flex-col gap-3.5">
+              <Field label="Status">
+                <Select
+                  value={state.status}
+                  onValueChange={(v) => requestStatus(v as PostStatus)}
+                  items={POST_STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s] }))}
+                >
+                  <SelectTrigger className="w-full" aria-label="Status" data-testid="status-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {POST_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s} disabled={s === "scheduled" && !canSchedule && state.status !== "scheduled"}>
+                        {STATUS_LABELS[s]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Scheduled for" htmlFor="scheduled-at-input">
+                <Input
+                  id="scheduled-at-input"
+                  type="datetime-local"
+                  value={isoToLocalInput(state.scheduledAt)}
+                  onChange={(e) => update({ scheduledAt: localInputToIso(e.target.value) })}
+                />
+              </Field>
+              <Field label="Pillar">
+                <PillarSelect
+                  pillars={pillars}
+                  value={state.pillarId}
+                  onChange={(pillarId) => update({ pillarId })}
+                  onPillarCreated={(p) => setPillars((list) => [...list, p].sort((a, b) => a.name.localeCompare(b.name)))}
+                />
+              </Field>
+              {isPublished && (
+                <Field label="Published URL" htmlFor="published-url-input">
+                  <Input id="published-url-input" value={state.publishedUrl ?? ""} readOnly className="text-xs" />
+                  <span className="text-xs text-muted-foreground">
+                    {state.publishedAt ? format(new Date(state.publishedAt), "EEE d MMM yyyy, HH:mm") : ""} ·{" "}
+                    <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => setPublishOpen(true)}>
+                      Edit
+                    </button>
+                  </span>
+                </Field>
+              )}
+              <Field label="Notes" htmlFor="notes">
+                <Textarea
+                  id="notes"
+                  value={state.notes}
+                  onChange={(e) => update({ notes: e.target.value })}
+                  placeholder="Sources, links, reminders to self…"
+                  className="min-h-20 text-sm"
+                />
+              </Field>
+            </div>
+          </section>
+
+          {isPublished && persistedRef.current && (
+            <section className="rounded-2xl border bg-card p-4 shadow-sm">
+              <h2 className="mb-3 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Metrics</h2>
+              <MetricsForm postId={postId} metrics={post?.post_metrics ?? null} />
+            </section>
+          )}
+        </aside>
+      </div>
 
       <PublishedUrlDialog
         open={publishOpen}
@@ -443,6 +505,7 @@ export function PostEditor({
         onConfirm={async ({ published_url, published_at }) => {
           const ok = await applyStatus({ status: "published", publishedUrl: published_url, publishedAt: published_at });
           if (ok) setPublishOpen(false);
+          else toast.error(saveError ?? "Could not save");
         }}
       />
       <ScheduleDateDialog
@@ -450,9 +513,11 @@ export function PostEditor({
         onOpenChange={setScheduleOpen}
         initialScheduledAt={state.scheduledAt}
         pending={saveState === "saving"}
+        title={isScheduled ? "Reschedule post" : "Schedule post"}
         onConfirm={async (iso) => {
           const ok = await applyStatus({ status: "scheduled", scheduledAt: iso });
           if (ok) setScheduleOpen(false);
+          else toast.error(saveError ?? "Could not save");
         }}
       />
       <ConfirmDialog
@@ -482,30 +547,41 @@ export function PostEditor({
   );
 }
 
+function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={htmlFor} className="text-xs text-muted-foreground">
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
 function SaveIndicator({ state, error }: { state: SaveState; error: string | null }) {
-  const base = "flex items-center gap-1 text-xs";
+  const base = "mr-1 hidden items-center gap-1 text-xs sm:flex";
   switch (state) {
     case "saving":
       return (
-        <span className={`${base} text-muted-foreground`} data-testid="save-indicator">
+        <span className={cn(base, "text-muted-foreground")} data-testid="save-indicator">
           <Loader2Icon className="size-3 animate-spin" /> Saving…
         </span>
       );
     case "saved":
       return (
-        <span className={`${base} text-emerald-600`} data-testid="save-indicator">
-          <CheckIcon className="size-3" /> Saved
+        <span className={cn(base, "text-muted-foreground")} data-testid="save-indicator">
+          <CheckIcon className="size-3 text-emerald-500" /> Saved
         </span>
       );
     case "dirty":
       return (
-        <span className={`${base} text-muted-foreground`} data-testid="save-indicator">
-          Unsaved changes
+        <span className={cn(base, "text-muted-foreground")} data-testid="save-indicator">
+          Unsaved
         </span>
       );
     case "error":
       return (
-        <span className={`${base} text-destructive`} data-testid="save-indicator" title={error ?? undefined}>
+        <span className={cn(base, "text-destructive")} data-testid="save-indicator" title={error ?? undefined}>
           {error ?? "Could not save"}
         </span>
       );

@@ -13,9 +13,8 @@ export default async function NewPostPage({
   const preset = params.scheduled_at && !Number.isNaN(Date.parse(params.scheduled_at)) ? params.scheduled_at : null;
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <h1 className="mb-4 font-heading text-xl font-semibold">New post</h1>
-      <PostEditor post={null} pillars={pillars} userId={user.id} presetScheduledAt={preset} />
+    <div>
+      <PostEditor post={null} pillars={pillars} userId={user.id} authorEmail={user.email ?? ""} presetScheduledAt={preset} />
     </div>
   );
 }

@@ -24,7 +24,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-heading text-xl font-semibold">Dashboard</h1>
+        <h1 className="font-heading text-xl font-semibold tracking-tight">Dashboard</h1>
         <div className="flex items-center gap-2 rounded-full border px-3 py-1 text-sm" title={`Longest streak: ${stats.longestStreak} days`} data-testid="streak">
           <FlameIcon className={stats.streak > 0 ? "size-4 text-orange-500" : "size-4 text-muted-foreground"} />
           <span className="font-medium tabular-nums">{stats.streak}</span>
@@ -35,10 +35,10 @@ export default async function DashboardPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map((t) => (
           <Link key={t.label} href={t.href}>
-            <Card size="sm" className="transition-colors hover:bg-muted/50">
+            <Card size="sm" className="h-full border-border/70 shadow-sm transition-colors duration-150 hover:bg-muted/40">
               <CardHeader>
                 <CardDescription>{t.label}</CardDescription>
-                <CardTitle className="text-3xl tabular-nums" data-testid={`tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}>
+                <CardTitle className="text-3xl font-semibold tracking-tight tabular-nums" data-testid={`tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}>
                   {t.value}
                 </CardTitle>
               </CardHeader>

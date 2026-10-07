@@ -41,7 +41,7 @@ test.describe("core loop", () => {
     // --- Schedule for tomorrow 10:00 (browser local = Europe/Warsaw in this config)
     const tomorrow = format(addDays(new Date(), 1), "yyyy-MM-dd'T'10:00");
     await page.locator("#scheduled-at-input").fill(tomorrow);
-    await page.getByRole("button", { name: "Mark as scheduled" }).click();
+    await page.getByTestId("schedule-button").click();
     await expect(page.getByText("Marked as scheduled")).toBeVisible();
 
     // --- Board: card is in Scheduled; drag to Published

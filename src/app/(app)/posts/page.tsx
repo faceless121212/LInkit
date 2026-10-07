@@ -16,7 +16,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="font-heading text-xl font-semibold">Posts</h1>
+        <h1 className="font-heading text-xl font-semibold tracking-tight">Posts</h1>
         <span className="text-sm text-muted-foreground">{posts.length} shown</span>
       </div>
       <Suspense>

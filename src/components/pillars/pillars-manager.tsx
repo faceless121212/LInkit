@@ -51,7 +51,7 @@ export function PillarsManager({ pillars, counts }: { pillars: Pillar[]; counts:
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="font-heading text-xl font-semibold">Pillars</h1>
+        <h1 className="font-heading text-xl font-semibold tracking-tight">Pillars</h1>
         <Button size="sm" onClick={() => setCreating(true)}>
           <PlusIcon data-icon="inline-start" />
           New pillar
