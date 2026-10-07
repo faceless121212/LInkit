@@ -1,5 +1,9 @@
+import { BoardView } from "@/components/board/board-view";
+import { listPosts } from "@/lib/posts/queries";
+
 export const metadata = { title: "Board" };
 
-export default function BoardPage() {
-  return <h1 className="font-heading text-xl font-semibold">Board</h1>;
+export default async function BoardPage() {
+  const posts = await listPosts();
+  return <BoardView posts={posts} />;
 }
