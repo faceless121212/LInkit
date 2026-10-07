@@ -1,4 +1,4 @@
-import { PenLineIcon } from "lucide-react";
+import { LogoTile } from "@/components/brand/logo";
 import { LoginForm } from "./login-form";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
@@ -11,9 +11,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       />
       <div className="relative w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/30">
-            <PenLineIcon className="size-5" />
-          </span>
+          <LogoTile size={44} />
           <h1 className="font-heading text-2xl font-semibold tracking-tight">Welcome back</h1>
           <p className="text-sm text-muted-foreground">Plan, draft and track your X posts. One place, no autoposting.</p>
         </div>

@@ -16,6 +16,7 @@ import {
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PillarChip, StatusBadge } from "@/components/posts/status-badge";
+import { Logo } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { PostStatus } from "@/lib/types";
 
@@ -34,17 +35,6 @@ const NAV = [
   { href: "/posts", label: "Posts", icon: ListIcon },
   { href: "/pillars", label: "Pillars", icon: TagIcon },
 ];
-
-function Logo() {
-  return (
-    <span className="flex items-center gap-2 font-heading text-[15px] font-semibold tracking-tight">
-      <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-        <PenLineIcon className="size-3.5" />
-      </span>
-      Linkit
-    </span>
-  );
-}
 
 export function AppShell({ email, recent, children }: { email: string; recent: RecentPost[]; children: React.ReactNode }) {
   const pathname = usePathname();
